@@ -519,7 +519,7 @@ static void write_root_script(void) {
       "  KSUD=$(find /data/app -path '*/com.resukisu.resukisu*/lib/arm64/libksud.so' 2>/dev/null | head -1)\n"
       "fi\n"
       "if [ ! -x \"$KSUD\" ]; then\n"
-      "  KSUD=$(find /data/app -path '*/com.kowx712.supermanager*/lib/arm64/libksud.so' 2>/dev/null | head -1)\n"
+      "  KSUD=$(find /data/app -path '*/com.kowx712.kowsupro*/lib/arm64/libksud.so' 2>/dev/null | head -1)\n"
       "fi\n"
       "if [ -z \"$KSUD\" ]; then KSUD=/data/local/tmp/ksud; fi\n"
       "if [ ! -x \"$KSUD\" ]; then KSUD=/data/adb/ksu/bin/ksud; fi\n"
