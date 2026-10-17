@@ -1016,7 +1016,14 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
     private fun firstValidProperty(vararg keys: String): String? = keys.asSequence().firstNotNullOfOrNull { validDeviceName(systemProperty(it)) }
 
     private fun prepareKsud(workDir: File, onLog: (String) -> Unit): File? {
-        val packages = listOf("me.weishu.kernelsu.pr", "me.weishu.kernelsu", "com.resukisu.resukisu", "org.bakasu.bakasu", "com.kowx712.supermanager")
+        val packages = listOf(
+            "me.weishu.kernelsu.pr",
+            "me.weishu.kernelsu",
+            "com.resukisu.resukisu",
+            "org.bakasu.bakasu",
+            "com.kowx712.supermanager",
+            "io.github.xyce3849.kmanager",
+        )
         var installed = false
         for (packageName in packages) {
             val appInfo = runCatching { appContext.packageManager.getApplicationInfo(packageName, 0) }.getOrNull() ?: continue
@@ -1030,7 +1037,7 @@ class AndroidGhostlockRepository(context: Context) : GhostlockRepository {
                 return output
             }.onFailure { onLog("<k> copy ksud failed: ${it.message}") }
         }
-        if (!installed) onLog("<k> KernelSU/ReSukiSU/BakaSU/KowSU app not installed")
+        if (!installed) onLog("<k> KernelSU/ReSukiSU/BakaSU/KowSU/KManager app not installed")
         return null
     }
 
