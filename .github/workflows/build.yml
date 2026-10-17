@@ -74,8 +74,33 @@ jobs:
         run: rustup toolchain link ondk "${{ runner.temp }}/ondk/toolchains/rust"
 
       - name: Decode Android signing key
-        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
-        run: echo ${{ secrets.SIGNING_KEY }} | base64 -d > keystore.jks
+        # 仓库 secrets（Settings → Secrets and variables → Actions）：
+        #   APPS_KEYSTORE          base64 编码的 .jks/.p12，或 keystore 原始内容
+        #   APPS_KEYSTORE_PASSWORD keystore 口令
+        #   APPS_KEY_ALIAS         key alias
+        #   APPS_KEY_PASSWORD      key 口令
+        # 四个都为空时跳过，Gradle 会自动退回 debug 签名。
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          KEYSTORE_B64: ${{ secrets.APPS_KEYSTORE }}
+        run: |
+          set -eu
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::warning::APPS_KEYSTORE 未配置，release 将使用 debug 签名"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_B64" | tr -d '\n\r' | base64 -d > keystore.jks 2>/dev/null || true
+          MAGIC=$(head -c 4 keystore.jks 2>/dev/null | od -An -tx1 | tr -d ' \n')
+          case "$MAGIC" in
+            feedfeed|cececece|3082*|3081*) ;;                 # JKS / BKS / PKCS12
+            *) printf '%s' "$KEYSTORE_B64" > keystore.jks ;;   # 未编码，按原文写入
+          esac
+          if [ ! -s keystore.jks ]; then
+            echo "::warning::APPS_KEYSTORE 为空，release 将使用 debug 签名"
+            rm -f keystore.jks
+          else
+            echo "keystore ready: $(wc -c < keystore.jks) bytes, magic=$MAGIC"
+          fi
 
       - name: Build Ghostlock binary
         run: |
@@ -90,9 +115,9 @@ jobs:
           export ANDROID_NDK_HOME="$ONDK_HOME"
           export NDK_ROOT="$ONDK_HOME"
           export KEYSTORE_PATH="../keystore.jks"
-          export KEYSTORE_PASS="${{ secrets.KEY_STORE_PASSWORD }}"
-          export KEY_ALIAS="${{ secrets.ALIAS }}"
-          export KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+          export KEYSTORE_PASS="${{ secrets.APPS_KEYSTORE_PASSWORD }}"
+          export KEY_ALIAS="${{ secrets.APPS_KEY_ALIAS }}"
+          export KEY_PASSWORD="${{ secrets.APPS_KEY_PASSWORD }}"
           ./gradlew :app:assembleRelease --no-daemon
 
       - name: Strip Ghostlock binary
@@ -101,6 +126,16 @@ jobs:
 
       - name: Rename Release APK
         run: mv build/app/outputs/apk/release/*.apk GhostLock-release.apk
+
+      - name: Verify APK signature
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER=$(find "$SDK/build-tools" -name apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs GhostLock-release.apk
+          else
+            echo "apksigner not found under $SDK; skipping verification"
+          fi
 
       - name: Prepare extractor binaries
         run: |
@@ -319,6 +354,9 @@ jobs:
           PY
 
       - name: Update Git Tag
+        # fork 仓库的 GITHUB_TOKEN 常为只读，推送 tag 会 403；APK 已在 Artifacts 中，
+        # 这里失败不应让整个构建变红。
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -329,6 +367,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Pre-release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: pre-release
